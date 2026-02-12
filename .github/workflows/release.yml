@@ -24,6 +24,8 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           default_bump: patch # Se não houver prefixo claro, assume que é um patch (opcional)
+          release_branches: main
+          fearch_depth: 0
 
       # Passo 2: Cria a Release no GitHub com as notas automáticas
       - name: Create a GitHub Release
