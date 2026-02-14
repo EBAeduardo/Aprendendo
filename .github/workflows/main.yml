@@ -1,0 +1,44 @@
+name: Versão Semântica Automática
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write # ESSENCIAL: Permite que o robô edite arquivos e faça push
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # A linha abaixo impede loop infinito (se o commit for do próprio robô, ele para)
+    if: "!contains(github.event.head_commit.message, 'chore(release)')"
+    
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Obrigatório: Baixa todo o histórico para calcular a versão
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Configurar Usuário do Git (O Robô)
+        # O Git precisa saber "quem" está fazendo o commit da nova versão
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Calcular Versão e Atualizar Arquivos
+        # "npx standard-version" faz:
+        # 1. Lê os commits
+        # 2. Atualiza o package.json
+        # 3. Gera/Atualiza o CHANGELOG.md
+        # 4. Cria o commit e a tag localmente
+        run: npx standard-version
+
+      - name: Enviar alterações para o GitHub (Push)
+        # Envia o commit do package.json atualizado e a nova tag
+        run: git push --follow-tags origin main
