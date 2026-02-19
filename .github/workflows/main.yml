@@ -64,7 +64,8 @@ jobs:
               
             elif [[ -n "$PREFIXO" && "$PREFIXO" != "$msg" ]]; then
               PRECEDENCIA_ATUAL=1 # PATCH
-              
+            else
+              PRECEDENCIA_ATUAL = 1
             fi
 
             # Atualiza a maior precedência encontrada
