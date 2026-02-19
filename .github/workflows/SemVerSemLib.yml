@@ -9,65 +9,59 @@ jobs:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Necessário para criar e dar push na tag
+      contents: write
     steps:
-      - name: Clone Manual e Seguro
+      - name: Checkout Manual Seguro
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Configura autenticação via Header (Segurança: evita token na URL/Logs)
+          # 1. Inicializa o repositório manualmente
+          git init
+          
+          # 2. Configura a autenticação via Header (evita token em logs)
           AUTH=$(printf "x-access-token:$GH_TOKEN" | base64 | tr -d '\n')
           git config --global http.https://github.com "AUTHORIZATION: basic $AUTH"
           
-          # Realiza o clone no diretório atual
-          git clone --depth=1 https://github.com{{ github.repository }} .
+          # 3. Adiciona o remote e baixa o código/tags
+          git remote add origin https://github.com{{ github.repository }}
+          git fetch --depth=1 origin ${{ github.event.pull_request.base.ref }}
+          git checkout FETCH_HEAD
           
-          # Busca todas as tags para o cálculo do SemVer
+          # 4. Puxa as tags para o cálculo do SemVer
           git fetch --tags --unshallow || git fetch --tags
 
       - name: Calcular e Criar Nova Tag
         id: semver
         run: |
-          # 1. Pega a última tag ou inicia v0.0.0
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           VERSION=${LATEST_TAG#v}
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           
-          # 2. Nome da branch de origem do PR
           BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
           echo "Processando branch: $BRANCH_NAME"
-          echo "Versão atual: $LATEST_TAG"
 
-          # 3. Lógica de decisão baseada no nome da branch
           if [[ "$BRANCH_NAME" == *"!"* ]]; then
-            MAJOR=$((MAJOR + 1))
-            MINOR=0
-            PATCH=0
+            MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
           elif [[ "$BRANCH_NAME" == feat-* ]]; then
-            MINOR=$((MINOR + 1))
-            PATCH=0
+            MINOR=$((MINOR + 1)); PATCH=0
           else
             PATCH=$((PATCH + 1))
           fi
 
           NEW_TAG="v$MAJOR.$MINOR.$PATCH"
           
-          # 4. Configura Git e realiza o Push
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Verifica se a tag já existe localmente ou remotamente
           if git rev-parse "$NEW_TAG" >/dev/null 2>&1; then
-            echo "Erro: A tag $NEW_TAG já existe. Abortando para evitar conflitos."
+            echo "Tag $NEW_TAG já existe."
             exit 1
           fi
 
           git tag $NEW_TAG
           git push origin $NEW_TAG
-          echo "Sucesso! Tag $NEW_TAG enviada para o repositório."
+          echo "Tag $NEW_TAG enviada com sucesso."
 
       - name: Limpar Credenciais
         if: always()
-        run: |
-          # Remove a configuração global por segurança após o uso
-          git config --global --unset http.https://github.com
+        run: git config --global --unset http.https://github.com
