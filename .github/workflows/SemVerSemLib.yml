@@ -11,27 +11,35 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Clone Manual Seguro
+      - name: Checkout Manual Seguro
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Configura autenticação via Header para evitar token na URL/Logs
-          git config --global http.https://github.com "AUTHORIZATION: basic $(echo -n x-access-token:$GH_TOKEN | base64)"
+          # 1. Inicializa o repositório manualmente
+          git init
           
-          # Clone direto do repositório atual
-          git clone --depth=1 https://github.com{{ github.repository }} .
+          # 2. Configura a autenticação via Header (evita token em logs)
+          AUTH=$(printf "x-access-token:$GH_TOKEN" | base64 | tr -d '\n')
+          git config --global http.https://github.com "AUTHORIZATION: basic $AUTH"
+          
+          # 3. Adiciona o remote e baixa o código/tags
+          git remote add origin https://github.com{{ github.repository }}
+          git fetch --depth=1 origin ${{ github.event.pull_request.base.ref }}
+          git checkout FETCH_HEAD
+          
+          # 4. Puxa as tags para o cálculo do SemVer
           git fetch --tags --unshallow || git fetch --tags
 
-      - name: Calcular e Push da Tag
+      - name: Calcular e Criar Nova Tag
+        id: semver
         run: |
-          # 1. Identificar última tag
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           VERSION=${LATEST_TAG#v}
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           
-          # 2. Lógica SemVer baseada na branch de origem
           BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
-          
+          echo "Processando branch: $BRANCH_NAME"
+
           if [[ "$BRANCH_NAME" == *"!"* ]]; then
             MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
           elif [[ "$BRANCH_NAME" == feat-* ]]; then
@@ -39,12 +47,21 @@ jobs:
           else
             PATCH=$((PATCH + 1))
           fi
-          
+
           NEW_TAG="v$MAJOR.$MINOR.$PATCH"
           
-          # 3. Configuração e Push
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
+          if git rev-parse "$NEW_TAG" >/dev/null 2>&1; then
+            echo "Tag $NEW_TAG já existe."
+            exit 1
+          fi
+
           git tag $NEW_TAG
           git push origin $NEW_TAG
+          echo "Tag $NEW_TAG enviada com sucesso."
+
+      - name: Limpar Credenciais
+        if: always()
+        run: git config --global --unset http.https://github.com
