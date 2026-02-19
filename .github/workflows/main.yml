@@ -64,7 +64,8 @@ jobs:
               
             elif [[ -n "$PREFIXO" && "$PREFIXO" != "$msg" ]]; then
               PRECEDENCIA_ATUAL=1 # PATCH
-              
+            else
+              PRECEDENCIA_ATUAL = 1
             fi
 
             # Atualiza a maior precedência encontrada
@@ -91,8 +92,8 @@ jobs:
             PATCH = $((PATCH + 1))
             echo "Ação: Incrementando PATCH."
           else
-            echo "Ação: Nenhum commit relevante encontrado. Nenhuma tag será gerada."
-            exit 0 # Sai do script com sucesso, encerrando o job pacificamente
+            PATCH = $((PATCH + 1))
+            echo "Nenhum commit relevante incrementa o PATCH"
           fi
 
           NEW_TAG="v$MAJOR.$MINOR.$PATCH"
