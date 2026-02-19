@@ -1,0 +1,62 @@
+name: Auto Semantic Versioning
+on:
+  push:
+    branches:
+      - 'feature-*'
+      - 'bugfix-*'
+      - 'hotfix-*'
+      - 'release-*'
+      - 'major-*'
+
+jobs:
+  tagging:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate New Tag
+        id: versioning
+        shell: bash
+        run: |
+          # 1. Extração do Prefixo
+          BRANCH_NAME="${GITHUB_REF_NAME}"
+          PREFIX=$(echo "$BRANCH_NAME" | cut -d'-' -f1)
+          echo "Prefixo da branch: $PREFIX"
+
+          # 2. Captura da última tag (ex: v1.2.3)
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          VERSION=${LATEST_TAG#v}
+          
+          # Garante que temos 3 partes (X.Y.Z)
+          if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            VERSION="0.0.0"
+          fi
+          
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+          # 3. Lógica de incremento
+          if [[ "$PREFIX" == "major" || "$PREFIX" == "release" ]]; then
+            MAJOR=$((MAJOR + 1))
+            MINOR=0
+            PATCH=0
+          elif [[ "$PREFIX" == "feature" || "$PREFIX" == "minor" ]]; then
+            MINOR=$((MINOR + 1))
+            PATCH=0
+          else
+            PATCH=$((PATCH + 1))
+          fi
+
+          NEW_TAG="v$MAJOR.$MINOR.$PATCH"
+          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
+
+      - name: Create and Push Tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag ${{ steps.versioning.outputs.tag }}
+          git push origin ${{ steps.versioning.outputs.tag }}
