@@ -8,32 +8,19 @@ jobs:
   tag-release:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # Essencial para permitir o push da tag
     steps:
-      - name: Checkout Manual Seguro
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # 1. Configurar autenticação segura
-          AUTH=$(printf "x-access-token:$GH_TOKEN" | base64 | tr -d '\n')
-          git config --global http.https://github.com "AUTHORIZATION: basic $AUTH"
-          
-          # 2. Inicializar o repositório
-          git init .
-          git remote add origin https://github.com{{ github.repository }}
-          
-          # 3. Trazer o conteúdo e histórico (substitui o fetch-depth: 0)
-          git fetch --tags --prune --unshallow origin +refs/heads/*:refs/remotes/origin/*
-          git checkout -f ${{ github.sha }}
+      - name: Checkout do código
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Obter última tag
         id: get_tag
         run: |
+          git fetch --tags
           # Pega a última tag ou inicia v0.0.0 se não existir nada
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
-
       - name: Calcular e Criar Nova Tag
         run: |
           # Remove o 'v' para manipular os números
@@ -42,10 +29,8 @@ jobs:
           
           # Nome da branch de origem do PR
           BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
-
           echo "Processando branch: $BRANCH_NAME"
           echo "Versão atual: $LATEST_TAG"
-
           # Lógica de decisão baseada no nome da branch
           if [[ "$BRANCH_NAME" == *"!"* ]]; then
             MAJOR=$((MAJOR + 1))
@@ -57,7 +42,6 @@ jobs:
           else
             PATCH=$((PATCH + 1))
           fi
-
           NEW_TAG="v$MAJOR.$MINOR.$PATCH"
           
           # Configura Git para realizar o Push
