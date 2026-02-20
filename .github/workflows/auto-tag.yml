@@ -18,12 +18,12 @@ jobs:
         id: get_tag
         run: |
           git fetch --tags
-          # Pega a última tag ou inicia v0.0.0 se não existir nada
+          # Pega a última tag ou inicia v0.0.0 
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
           echo "LATEST_TAG=$LATEST_TAG" >> $GITHUB_ENV
       - name: Calcular e Criar Nova Tag
         run: |
-          # Remove o 'v' para manipular os números
+          # Remove o 'v' 
           VERSION=${LATEST_TAG#v}
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
           
@@ -31,7 +31,8 @@ jobs:
           BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
           echo "Processando branch: $BRANCH_NAME"
           echo "Versão atual: $LATEST_TAG"
-          # Lógica de decisão baseada no nome da branch
+          
+          
           if [[ "$BRANCH_NAME" == *"!"* ]]; then
             MAJOR=$((MAJOR + 1))
             MINOR=0
