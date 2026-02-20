@@ -1,4 +1,4 @@
-name: SemVer
+name: SemVer Auto Tag
 on:
   pull_request:
     types: [closed]
@@ -8,59 +8,43 @@ jobs:
   tag-release:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - name: Checkout Manual Seguro (Self-Managed)
+      - name: Criar Tag Sem Download de Arquivos
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # O GitHub já te dá essas informações, não precisa ler do Git local
+          BRANCH_NAME: ${{ github.event.pull_request.head.ref }}
         run: |
-          # 1. Inicializa o repositório do zero
+          # 1. Configurar Autenticação e Git (Mínimo necessário)
+          AUTH=$(printf "x-access-token:$GH_TOKEN" | base64 | tr -d '\n')
+          git config --global http.https://github.com "AUTHORIZATION: basic $AUTH"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 2. Inicializar apenas para conectar ao remoto
           git init
+          git remote add origin https://github.com{{ github.repository }}
           
-          # 2. Configura o remoto usando o token de acesso temporário
-          git remote add origin "https://x-access-token:${GH_TOKEN}@://github.com{{ github.repository }}.git"
+          # 3. Pegar SÓ as tags (não baixa nenhum arquivo do código)
+          git fetch --tags --quiet
           
-          # 3. Busca tags e histórico (equivalente ao fetch-depth: 0)
-          # O unshallow garante que tenhamos o histórico completo para o git describe
-          git fetch --tags --prune --unshallow || git fetch --tags
-          
-          # 4. Sincroniza com a branch de destino do PR (main/master)
-          git fetch origin ${{ github.ref_name }}
-          git checkout ${{ github.ref_name }}
-
-          # 5. Configura a identidade do bot para operações de Git
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-      - name: Calcular e Criar Nova Tag
-        run: |
-          # Pega a última tag ou inicia em v0.0.0
+          # 4. Lógica de Versão
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-          
-          # Remove o 'v' para manipular os números
           VERSION=${LATEST_TAG#v}
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-          
-          # Nome da branch de origem (ex: feat-login)
-          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
 
-          echo "Branch de origem: $BRANCH_NAME"
-          echo "Tag anterior: $LATEST_TAG"
-
-          # Lógica de incremento baseada no nome da branch
           if [[ "$BRANCH_NAME" == *"!"* ]]; then
-            MAJOR=$((MAJOR + 1))
-            MINOR=0
-            PATCH=0
+            MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0
           elif [[ "$BRANCH_NAME" == feat-* ]]; then
-            MINOR=$((MINOR + 1))
-            PATCH=0
+            MINOR=$((MINOR + 1)); PATCH=0
           else
             PATCH=$((PATCH + 1))
           fi
 
           NEW_TAG="v$MAJOR.$MINOR.$PATCH"
-          echo "Nova Tag Calculada: $NEW_TAG"
-          
-          # Cria a tag localmente e faz o push para o remoto 'origin'
-          git tag "$NEW_TAG"
-          git push origin "$NEW_TAG"
+
+          # 5. Criar e Push (apontando para o commit do merge)
+          git tag $NEW_TAG ${{ github.sha }}
+          git push origin $NEW_TAG
